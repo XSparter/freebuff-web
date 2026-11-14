@@ -1,9 +1,11 @@
 # freebuff-web
 
-Usa [freebuff](https://www.npmjs.com/package/freebuff) (CLI interattiva per il coding con AI) da **browser**: sul PC, dal telefono in rete locale o ovunque tramite **Tailscale**, anche da più dispositivi insieme sulla stessa sessione.
+Usa la **CLI di freebuff** ([pacchetto npm `freebuff`](https://www.npmjs.com/package/freebuff), l'assistente AI per il coding da terminale) da **browser**: sul PC, dal telefono in rete locale o ovunque tramite **Tailscale**, anche da più dispositivi insieme sulla stessa sessione.
 
-Lanci `freebuff` in una cartella come sempre: invece di aprirsi nella console, si apre una pagina web con il terminale vero di freebuff. Nella console compare un **QR code** da scansionare col telefono.
+Lanci `freebuff` in una cartella come sempre: invece di aprirsi nella console, si apre una pagina web con il terminale vero della CLI. Nella console compare un **QR code** da scansionare col telefono.
 
+> **Nota:** freebuff-web funziona solo con la **CLI** di freebuff, quella che si usa da terminale. **Non** è integrato con l'applicazione nativa/desktop di freebuff e non la usa: esegue il comando `freebuff` in un terminale (PTY) e lo mostra nel browser. È un progetto indipendente, non ufficiale.
+>
 > Solo Windows (usa ConPTY tramite `pywinpty`).
 
 ## Funzionalità
@@ -17,7 +19,7 @@ Lanci `freebuff` in una cartella come sempre: invece di aprirsi nella console, s
 
 ## Installazione
 
-Requisiti: Windows, Python 3.10+, freebuff installato (`npm i -g freebuff`).
+Requisiti: Windows, Python 3.10+, la CLI di freebuff installata (`npm i -g freebuff`).
 
 ```powershell
 git clone https://github.com/XSparter/freebuff-web.git

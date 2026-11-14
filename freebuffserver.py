@@ -1,4 +1,5 @@
-"""freebuff-web: terminale web per usare freebuff da browser (PC, telefono, Tailscale).
+"""freebuff-web: terminale web per usare la CLI di freebuff da browser (PC, telefono, Tailscale).
+Non integrato con l'app nativa di freebuff: esegue il comando `freebuff` in una PTY.
 
 Uso:
   python freebuffserver.py serve                     # avvia solo il server
