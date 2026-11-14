@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+<title>freebuff</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+<style>
+  :root { --bg: #0c0c0c; --bar: #1b1b1b; --btn: #2d2d2d; --fg: #ddd; --accent: #4e9cff; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+               font-family: system-ui, sans-serif; overflow: hidden; }
+  body { display: flex; flex-direction: column; }
+  #wrap { flex: 1; position: relative; min-height: 0; overflow: hidden; }
+  #t { position: absolute; inset: 4px; }
+  #bar { background: var(--bar); padding: 6px; display: flex; flex-direction: column; gap: 6px;
+         border-top: 1px solid #333; }
+  #keys { display: flex; gap: 4px; overflow-x: auto; }
+  #keys button, #send { background: var(--btn); color: var(--fg); border: 0; border-radius: 6px;
+         padding: 8px 10px; font-size: 14px; flex: none; touch-action: manipulation; }
+  #keys button:active, #send:active { background: var(--accent); }
+  #row { display: flex; gap: 6px; }
+  #inp { flex: 1; min-width: 0; background: #000; color: var(--fg); border: 1px solid #444;
+         border-radius: 6px; padding: 8px; font-size: 16px; resize: none; height: 22px; font-family: inherit; }
+  #send { background: var(--accent); color: #fff; }
+  #st { font-size: 12px; opacity: .7; padding: 0 2px; }
+  #tools { position: absolute; right: 8px; bottom: 8px; z-index: 5; display: flex; gap: 6px; align-items: center; }
+  #tools button { background: var(--btn); color: var(--fg); border: 0; border-radius: 6px; padding: 6px 9px; opacity: .85; }
+  #badge { font-size: 12px; background: #3a2f00; color: #ffd36b; border-radius: 6px; padding: 5px 8px; display: none; }
+  body.nobar #bar { display: none; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="t"></div>
+  <div id="tools">
+    <span id="badge" title="Un altro dispositivo sta usando la sessione: tocca o scrivi per prendere il comando">altro dispositivo attivo</span>
+    <button id="toggle" title="Mostra/nascondi barra">⌨</button>
+  </div>
+</div>
+<div id="bar">
+  <div id="keys">
+    <button data-k="&#27;">Esc</button>
+    <button data-k="&#9;">Tab</button>
+    <button data-k="&#27;[A">↑</button>
+    <button data-k="&#27;[B">↓</button>
+    <button data-k="&#27;[D">←</button>
+    <button data-k="&#27;[C">→</button>
+    <button data-k="&#13;">Invio</button>
+    <button data-k="&#3;">Ctrl+C</button>
+    <button data-k="&#127;">⌫</button>
+    <button data-k="&#27;[Z">⇧Tab</button>
+    <button data-k="/">/</button>
+  </div>
+  <div id="row">
+    <textarea id="inp" rows="1" placeholder="Scrivi qui e premi Invia" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false"></textarea>
+    <button id="send">Invia</button>
+  </div>
+  <div id="st">connessione…</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<script>
+const id = location.pathname.split('/').pop();
+const coarse = matchMedia('(pointer: coarse)').matches;
+const BASE_FONT = coarse ? 12 : 14;
+const term = new Terminal({ cursorBlink: true, fontSize: BASE_FONT, scrollback: 10000,
+  fontFamily: 'Cascadia Mono, Consolas, Menlo, monospace', theme: { background: '#0c0c0c' } });
+const box = document.getElementById('t');
+term.open(box);
+const st = document.getElementById('st'), inp = document.getElementById('inp'), badge = document.getElementById('badge');
+let ws, ptyRows = term.rows, ptyCols = term.cols, lastWanted = '';
+
+// dimensione di una cella al font base (serve per calcolare quante righe/colonne ci stanno)
+function cell() {
+  const d = term._core && term._core._renderService && term._core._renderService.dimensions;
+  const w = d && d.css.cell.width, h = d && d.css.cell.height;
+  const k = BASE_FONT / term.options.fontSize;   // riporta al font base
+  return (w && h) ? { w: w * k, h: h * k } : { w: BASE_FONT * 0.6, h: BASE_FONT * 1.2 };
+}
+function area() { return { w: box.clientWidth, h: box.clientHeight }; }
+
+function send(o) { if (ws && ws.readyState === 1) { ws.send(JSON.stringify(o)); return true; } return false; }
+function input(d) { send({ t: 'i', d }); }
+function activate() { send({ t: 'a' }); }
+
+// comunica al server quante righe/colonne vorrebbe questo dispositivo
+function reportWanted() {
+  if (window.visualViewport) document.body.style.height = visualViewport.height + 'px';
+  const c = cell(), a = area();
+  const cols = Math.max(10, Math.floor(a.w / c.w)), rows = Math.max(5, Math.floor(a.h / c.h));
+  const key = rows + 'x' + cols;
+  if (key !== lastWanted) { lastWanted = key; send({ t: 'r', rows, cols }); }
+  applySize();
+}
+
+// disegna alla dimensione decisa dal server; se non ci sta, rimpicciolisce il font
+function applySize() {
+  if (term.cols !== ptyCols || term.rows !== ptyRows) term.resize(ptyCols, ptyRows);
+  const c = cell(), a = area();
+  const scale = Math.min(1, a.w / (ptyCols * c.w), a.h / (ptyRows * c.h));
+  const fs = Math.max(5, Math.floor(BASE_FONT * scale * 10) / 10);
+  if (Math.abs(fs - term.options.fontSize) > 0.05) term.options.fontSize = fs;
+}
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws/${id}`);
+  ws.onopen = () => { st.textContent = 'connesso'; lastWanted = ''; term.reset(); reportWanted(); };
+  ws.onmessage = e => {
+    const d = e.data;
+    if (d.charCodeAt(0) === 0) {           // messaggio di controllo
+      const m = JSON.parse(d.slice(1));
+      if (m.t === 'size') {
+        ptyRows = m.rows; ptyCols = m.cols; applySize();
+        badge.style.display = m.me ? 'none' : (lastWanted && lastWanted !== m.rows + 'x' + m.cols ? 'inline' : 'none');
+      }
+      return;
+    }
+    term.write(d);
+  };
+  ws.onclose = () => { st.textContent = 'disconnesso, riconnessione…'; setTimeout(connect, 1000); };
+}
+
+// risposte automatiche del terminale alle interrogazioni di freebuff (posizione cursore, tipo di
+// terminale, colori, modalità, focus): non sono input dell'utente. Il server le inoltra solo dal
+// dispositivo attivo, altrimenti con più dispositivi freebuff riceve risposte doppie.
+const REPLY = /^(?:\x1b\[\??\d*(?:;\d*)*R|\x1b\[[?>=][\d;]*c|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[\??[\d;]*\$y|\x1bP[^\x1b]*\x1b\\|\x1b\[[IO]|\x1b\[\?[\d;]*u|\x1b\[\d+;\d+;\d+t)+$/;
+term.onData(d => REPLY.test(d) ? send({ t: 'q', d }) : input(d));
+// chi tocca/clicca/mette a fuoco la pagina prende il comando della dimensione
+box.addEventListener('pointerdown', activate);
+addEventListener('focus', activate);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) activate(); });
+badge.addEventListener('click', activate);
+
+// tasti speciali: mousedown preventDefault per non perdere il focus/tastiera
+document.querySelectorAll('#keys button').forEach(b => {
+  b.addEventListener('mousedown', e => e.preventDefault());
+  b.addEventListener('click', () => input(b.dataset.k));
+});
+function submit() {
+  // le tastiere dei telefoni aggiungono spazi/a capo finali: con "/history " freebuff chiude il menu comandi
+  const v = inp.value.replace(/^\s+|\s+$/g, '');
+  inp.value = '';
+  if (!v) { input('\r'); return; }
+  input(v.includes('\n') ? '\x1b[200~' + v + '\x1b[201~' : v);   // più righe: incolla come blocco
+  setTimeout(() => input('\r'), 80);
+}
+document.getElementById('send').addEventListener('mousedown', e => e.preventDefault());
+document.getElementById('send').addEventListener('click', () => { submit(); inp.focus(); });
+inp.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
+});
+// tastiere Android (Gboard ecc.): Invio arriva come inserimento di "a capo", non come keydown
+inp.addEventListener('beforeinput', e => {
+  if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') { e.preventDefault(); submit(); }
+});
+inp.addEventListener('input', () => { if (coarse && inp.value.includes('\n')) submit(); });
+inp.addEventListener('focus', activate);
+
+// su touch la tastiera dentro xterm è inaffidabile (correttore, spazi automatici): si scrive nella barra
+if (coarse && term.textarea) term.textarea.addEventListener('focus', () => {
+  if (!document.body.classList.contains('nobar')) inp.focus();
+});
+document.getElementById('toggle').addEventListener('click', () => {
+  document.body.classList.toggle('nobar'); setTimeout(reportWanted, 50);
+});
+if (!coarse) document.body.classList.add('nobar');   // su desktop si scrive direttamente nel terminale
+addEventListener('resize', reportWanted);
+if (window.visualViewport) visualViewport.addEventListener('resize', reportWanted);
+connect();
+if (!coarse) term.focus();
+</script>
+</body>
+</html>
